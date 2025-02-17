@@ -1,0 +1,18 @@
+{
+    "name": "osu-discord-bot",
+    "version": "1.0.0",
+    "description": "Bot Discord untuk menampilkan hasil skor terbaru dari osu! secara real-time",
+    "main": "bot.js",
+    "scripts": {
+      "start": "node bot.js"
+    },
+    "dependencies": {
+      "discord.js": "14.11.0",
+      "axios": "1.6.3",
+      "dotenv": "16.3.1"
+    },
+    "engines": {
+      "node": ">=18.0.0"
+    }
+  }
+  
