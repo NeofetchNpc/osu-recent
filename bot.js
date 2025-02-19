@@ -1,10 +1,5 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const axios = require("axios");
-
-const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
-});
 
 const OSU_API_URL = "https://osu.ppy.sh/api/v2";
 const MODES = ["osu", "taiko", "fruits", "mania"];
@@ -52,44 +47,48 @@ async function fetchLatestScore(mode) {
     }
 }
 
-// Fungsi untuk mengirim embed ke Discord
+// Fungsi untuk mengirim embed ke Discord menggunakan webhook
 async function sendScoreEmbed(score, mode) {
-    const channel = client.channels.cache.get(process.env.DISCORD_CHANNEL_ID);
-    if (!channel) return console.error("❌ [DISCORD] Channel tidak ditemukan!");
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    if (!webhookUrl) return console.error("❌ [DISCORD] Webhook URL tidak ditemukan!");
 
     const beatmapTitle = score.beatmap?.title || score.beatmapset?.title_unicode || score.beatmapset?.title || "Unknown Beatmap";
     const beatmapCover = score.beatmapset?.covers?.list || "https://osu.ppy.sh/favicon.ico";
     const beatmapUrl = score.beatmap?.url || `https://osu.ppy.sh/beatmaps/${score.beatmap?.id}`;
 
-    const embed = new EmbedBuilder()
-        .setColor("#ff66aa")
-        .setTitle(`🎮 ${score.user.username} memainkan ${beatmapTitle}`)
-        .setURL(beatmapUrl)
-        .setThumbnail(beatmapCover)
-        .addFields(
+    const embed = {
+        color: 0xff66aa,
+        title: `🎮 ${score.user.username} memainkan ${beatmapTitle}`,
+        url: beatmapUrl,
+        thumbnail: {
+            url: beatmapCover
+        },
+        fields: [
             { name: "🎯 Accuracy", value: `${(score.accuracy * 100).toFixed(2)}%`, inline: true },
             { name: "🏆 Rank", value: score.rank, inline: true },
             { name: "💯 PP", value: score.pp ? `${score.pp.toFixed(2)} pp` : "N/A", inline: true },
             { name: "💥 Max Combo", value: `${score.max_combo}x`, inline: true },
             { name: "❌ Misses", value: `${score.statistics.count_miss}`, inline: true },
             { name: "🕹 Mode", value: mode.toUpperCase(), inline: true }
-        );
-
-    // Ambil foto profil pemain dari response
-    const playerProfileUrl = score.user.avatar_url || "https://osu.ppy.sh/favicon.ico";
-    embed.setFooter({
-        text: "Osu! Score Update",
-        iconURL: playerProfileUrl // Menggunakan foto profil pemain
-    });
+        ],
+        footer: {
+            text: "Osu! Score Update",
+            icon_url: score.user.avatar_url || "https://osu.ppy.sh/favicon.ico"
+        }
+    };
 
     if (score.ended_at) {
         const timestamp = new Date(score.ended_at);
         if (!isNaN(timestamp)) {
-            embed.setTimestamp(timestamp);
+            embed.timestamp = timestamp.toISOString();
         }
     }
 
-    await channel.send({ embeds: [embed] });
+    try {
+        await axios.post(webhookUrl, { embeds: [embed] });
+    } catch (error) {
+        console.error("❌ [DISCORD] Gagal mengirim embed ke webhook", error.response?.data || error.message);
+    }
 }
 
 // Fungsi untuk mengecek skor terbaru di semua mode
@@ -118,33 +117,31 @@ async function checkPlayerStatus() {
         if (playerStatus !== lastPlayerStatus) {
             lastPlayerStatus = playerStatus;
 
-            const channel = client.channels.cache.get(process.env.DISCORD_CHANNEL_ID);
-            if (!channel) return console.error("❌ [DISCORD] Channel tidak ditemukan!");
+            const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+            if (!webhookUrl) return console.error("❌ [DISCORD] Webhook URL tidak ditemukan!");
 
-            const embed = new EmbedBuilder()
-                .setColor("#ff66aa")
-                .setTitle(`${response.data.username} Status`)
-                .setDescription(`Status Pemain: **${playerStatus}**`)
-                .setFooter({
+            const embed = {
+                color: 0xff66aa,
+                title: `${response.data.username} Status`,
+                description: `Status Pemain: **${playerStatus}**`,
+                footer: {
                     text: "Osu! Player Status",
-                    iconURL: response.data.avatar_url || "https://osu.ppy.sh/favicon.ico" // Menggunakan foto profil pemain
-                });
+                    icon_url: response.data.avatar_url || "https://osu.ppy.sh/favicon.ico"
+                }
+            };
 
-            await channel.send({ embeds: [embed] });
-            console.log(`✅ Status ${response.data.username}: ${playerStatus}`);
+            try {
+                await axios.post(webhookUrl, { embeds: [embed] });
+                console.log(`✅ Status ${response.data.username}: ${playerStatus}`);
+            } catch (error) {
+                console.error("❌ [DISCORD] Gagal mengirim embed ke webhook", error.response?.data || error.message);
+            }
         }
     } catch (error) {
         console.error("❌ [OSU] Gagal memeriksa status pemain", error.response?.data || error.message);
     }
 }
 
-// Event ketika bot siap
-client.once("ready", () => {
-    console.log(`✅ [DISCORD] Bot ${client.user.tag} siap!`);
-    console.log("🔄 Memulai pemantauan skor setiap 5 detik...");
-    setInterval(checkScores, 5000); // Memeriksa skor setiap 5 detik
-    setInterval(checkPlayerStatus, 10000); // Memeriksa status pemain setiap 10 detik
-});
-
-// Login ke Discord
-client.login(process.env.DISCORD_TOKEN);
+// Memulai pemantauan skor dan status pemain
+setInterval(checkScores, 5000); // Memeriksa skor setiap 5 detik
+setInterval(checkPlayerStatus, 10000); // Memeriksa status pemain setiap 10 detik
